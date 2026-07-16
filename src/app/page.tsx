@@ -1,66 +1,143 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
+
+import { useState } from 'react';
+import { useBookmarks } from '@/hooks/useBookmarks';
+import BookmarkCard from '@/components/BookmarkCard/BookmarkCard';
+import AddBookmarkModal from '@/components/AddBookmarkModal/AddBookmarkModal';
+import BookmarkDetail from '@/components/BookmarkDetail/BookmarkDetail';
+import FilterBar from '@/components/FilterBar/FilterBar';
+import { type Bookmark } from '@/lib/db';
+import styles from './page.module.css';
 
 export default function Home() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
+  const [starredOnly, setStarredOnly] = useState(false);
+  const [tagFilter, setTagFilter] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedBookmark, setSelectedBookmark] = useState<Bookmark | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+
+  const {
+    bookmarks,
+    allTags,
+    loading,
+    addBookmark,
+    updateBookmark,
+    deleteBookmark,
+    toggleStar,
+    toggleStatus,
+  } = useBookmarks({ searchQuery, statusFilter, tagFilter, starredOnly });
+
+  const handleSave = async (data: {
+    url: string;
+    title: string;
+    description: string;
+    thumbnail: string;
+    tags: string[];
+    memo: string;
+  }) => {
+    await addBookmark({
+      ...data,
+      status: 'unread',
+      starred: false,
+    });
+  };
+
+  const handleCardClick = (bookmark: Bookmark) => {
+    setSelectedBookmark(bookmark);
+    setShowDetail(true);
+  };
+
+  const handleDetailClose = () => {
+    setShowDetail(false);
+    setSelectedBookmark(null);
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className={styles.container}>
+      <header className={styles.header}>
+        <div className={styles.titleWrap}>
+          <h1 className={styles.appTitle}>honnno-mushi</h1>
+          <span className={styles.emoji}>🐛</span>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <p className={styles.subtitle}>あなたのリーディングリスト</p>
+      </header>
+
+      <FilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        statusFilter={statusFilter}
+        onStatusChange={setStatusFilter}
+        starredOnly={starredOnly}
+        onStarredChange={setStarredOnly}
+        tagFilter={tagFilter}
+        onTagChange={setTagFilter}
+        allTags={allTags}
+      />
+
+      {loading ? (
+        <div className={styles.loadingWrap}>
+          <div className={styles.spinner} />
         </div>
-      </main>
+      ) : (
+        <>
+          {bookmarks.length > 0 && (
+            <p className={styles.count}>{bookmarks.length} 件</p>
+          )}
+          <div className={styles.grid}>
+            {bookmarks.length === 0 ? (
+              <div className={styles.empty}>
+                <span className={styles.emptyEmoji}>📚</span>
+                <h2 className={styles.emptyTitle}>
+                  {searchQuery || statusFilter !== 'all' || starredOnly || tagFilter
+                    ? '条件に一致するブックマークがありません'
+                    : 'まだブックマークがありません'}
+                </h2>
+                <p className={styles.emptyText}>
+                  {searchQuery || statusFilter !== 'all' || starredOnly || tagFilter
+                    ? 'フィルターを変更してみてください'
+                    : '右下の + ボタンからURLを追加してみましょう！'}
+                </p>
+              </div>
+            ) : (
+              bookmarks.map((bookmark) => (
+                <BookmarkCard
+                  key={bookmark.id}
+                  bookmark={bookmark}
+                  onToggleStar={toggleStar}
+                  onToggleStatus={toggleStatus}
+                  onClick={handleCardClick}
+                />
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      <button
+        className={styles.fab}
+        onClick={() => setShowAddModal(true)}
+        aria-label="ブックマークを追加"
+      >
+        +
+      </button>
+
+      <AddBookmarkModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSave={handleSave}
+      />
+
+      <BookmarkDetail
+        bookmark={selectedBookmark}
+        isOpen={showDetail}
+        onClose={handleDetailClose}
+        onUpdate={updateBookmark}
+        onDelete={deleteBookmark}
+        onToggleStar={toggleStar}
+        onToggleStatus={toggleStatus}
+      />
     </div>
   );
 }
