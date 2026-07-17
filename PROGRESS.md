@@ -199,4 +199,129 @@ interface Bookmark {
 
 ---
 
+## 🔜 次のステップ: Firebase（クラウド DB）への移行計画
+
+### ステータス: **検討中（ユーザーが学習・検討中）**
+
+現在は IndexedDB（ブラウザ内蔵 DB）を使っているが、
+**Firebase Firestore（クラウド DB）** に移行することで、
+スマホと PC 間でデータを同期できるようにする計画がある。
+
+### なぜ移行したいか
+
+- 現状: データは 1 つのブラウザにしか存在しない
+- 目標: どのデバイスからでも同じブックマークにアクセスしたい
+- 副次目標: DB の仕組みを学習したい
+
+### 移行で何が変わるか
+
+```
+現在（IndexedDB）:
+  スマホの Safari → [ブラウザ内 DB] ← データはここだけ
+  PC の Chrome   → [ブラウザ内 DB] ← 別のデータ（同期しない）
+
+移行後（Firebase Firestore）:
+  スマホの Safari → [Firebase クラウド DB] ← 同じデータ！
+  PC の Chrome   →          ↑              ← 同じデータ！
+```
+
+### 技術的な計画
+
+#### 追加するもの
+
+| 項目 | 技術 | 説明 |
+|---|---|---|
+| クラウド DB | Firebase Firestore | Google のリアルタイム NoSQL DB。無料枠で十分 |
+| 認証 | Firebase Auth（Google ログイン） | 「誰のデータか」を識別するために必要 |
+| Context | React Context（AuthContext） | 認証状態をアプリ全体で共有 |
+
+#### 変更するファイル（2 ファイルだけ差し替え）
+
+現在の設計では、データ操作が `src/lib/db.ts` と `src/lib/bookmarks.ts` に集約されている。
+この 2 ファイルを Firestore 版に書き換えるだけで、UI コンポーネントは一切変更不要。
+
+```
+変更前: useBookmarks → bookmarks.ts → IndexedDB (Dexie.js)
+変更後: useBookmarks → bookmarks.ts → Firebase Firestore
+                        ↑ ここだけ差し替え
+```
+
+これが可能なのは、初期設計で **データ層と UI 層を分離** していたため。
+
+#### 新規追加するファイル
+
+| ファイル | 役割 |
+|---|---|
+| `src/lib/firebase.ts` | Firebase アプリ初期化、Firestore / Auth インスタンス |
+| `src/lib/auth.ts` | Google ログイン / ログアウト関数 |
+| `src/hooks/useAuth.ts` | 認証状態管理フック |
+| `src/contexts/AuthContext.tsx` | 認証状態をアプリ全体で共有する Context |
+| `src/components/AuthGuard/` | 未ログイン時のログイン画面 |
+| `.env.local` | Firebase 設定値（.gitignore 対象） |
+
+#### Firestore データ構造
+
+```
+users/
+  └── {userId}/
+        └── bookmarks/
+              ├── {bookmarkId}: { url, title, tags, status, ... }
+              ├── {bookmarkId}: { ... }
+              └── ...
+```
+
+#### セキュリティルール（Firestore）
+
+```
+match /users/{userId}/bookmarks/{bookmarkId} {
+  allow read, write: if request.auth != null
+                     && request.auth.uid == userId;
+}
+```
+→ 自分のデータだけ読み書き可能。他人のデータは絶対にアクセスできない。
+
+### ユーザーが手動で行う作業
+
+1. Firebase コンソール (https://console.firebase.google.com) でプロジェクト作成
+2. Authentication → Google プロバイダーを有効化
+3. Firestore Database を作成
+4. ウェブアプリを追加 → 設定値を取得
+5. Vercel ダッシュボードに環境変数を設定
+
+### 安全性
+
+| 懸念 | 回答 |
+|---|---|
+| 費用 | Firebase Spark プラン（無料）。クレカ登録不要 |
+| API キー漏洩 | Firebase API キーはプロジェクト識別子であり秘密情報ではない |
+| 個人情報 | 保存するのは URL とメモだけ。Google ログインでは UID のみ使用 |
+| データ安全性 | セキュリティルールで自分のデータのみアクセス可能 |
+
+### 未決定事項
+
+- [ ] 既存の IndexedDB データを Firebase に移行するか、新規スタートするか
+- [ ] 実施タイミング（ユーザーが学習完了後に着手予定）
+
+---
+
+## 🎨 UI 拡張方針
+
+今後 UI をどんどん改良しやすくするために、以下の設計方針を採用する予定：
+
+```
+src/
+├── contexts/          ← アプリ全体の状態管理（認証、テーマ等）
+├── hooks/             ← ロジックの再利用（データ操作）
+├── components/        ← UI の部品（見た目だけ担当）
+└── app/
+    └── page.tsx       ← 組み立てだけ、ロジックは hooks/contexts に委譲
+```
+
+この分離により：
+- **新 UI コンポーネント追加** → `components/` にファイル追加するだけ
+- **データ取得方法の変更** → `hooks/` だけ変更、UI はそのまま
+- **新ページ追加** → `app/` にルート追加、既存 hooks/components を再利用
+
+---
+
 *最終更新: 2026-07-17*
