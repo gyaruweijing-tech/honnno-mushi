@@ -1,0 +1,202 @@
+# 📝 PROGRESS — honnno-mushi 開発記録
+
+このファイルは、プロジェクトの経緯・設計思想・実装状況をまとめた開発記録です。
+他の AI や開発者がこのプロジェクトを引き継ぐ際の参考資料として機能します。
+
+---
+
+## 🎯 プロジェクト概要
+
+**honnno-mushi（本の虫）** は、あとで読みたい記事や X のポスト等の URL を
+ブックマーク的に保存・管理する個人用 PWA アプリです。
+
+### なぜ作ったか
+
+- 開発者（ユーザー）が AI ツール「Google Antigravity」の学習を兼ねて、
+  実践的なアプリを作りたかった
+- 記事や URL を「あとで読む」リストとして管理するシンプルなツールが欲しかった
+- PWA として作り、スマホのホーム画面から使えるようにしたかった
+
+### 基本コンセプト
+
+1. **URL を保存** → OGP（Open Graph Protocol）でタイトル・サムネイル・説明文を自動取得
+2. **カード型で一覧表示** → タグ・ステータス・お気に入りで整理
+3. **タップで元記事に飛ぶ** → アプリ内で記事を表示するのではなく、元 URL を開く
+4. **完全無料** — 外部 DB・API キー一切不要
+5. **プライバシー安全** — GitHub に public で出しても問題なし（秘密情報ゼロ）
+
+---
+
+## 🏗 設計判断の記録
+
+### ストレージ: IndexedDB（Dexie.js）を選んだ理由
+
+| 候補 | 採用 | 理由 |
+|---|---|---|
+| localStorage | ❌ | 5MB制限、文字列のみ、構造化データに弱い |
+| **IndexedDB (Dexie.js)** | **✅** | 構造化データ対応、容量十分、オフライン完全対応、無料 |
+| Firebase Firestore | ❌ | 同期不要（1デバイス完結）なのでオーバーキル |
+
+- ユーザーの要件：「同期不要、1 デバイスで完結、完全オフライン OK」
+- Dexie.js は IndexedDB のラッパーで、Promise ベースの使いやすい API を提供
+
+### OGP 取得: Vercel Serverless Functions を選んだ理由
+
+- ブラウザから直接他サイトの HTML を fetch すると **CORS** でブロックされる
+- → サーバーサイドでプロキシする必要がある
+- Vercel Serverless Functions は Next.js の API Routes として自然に書ける
+- Vercel Hobby プラン（無料）で十分な呼び出し回数
+- 外部 API キー不要。cheerio で HTML をパースするだけ
+
+### フレームワーク: Next.js を選んだ理由
+
+- Vercel との相性が抜群（push するだけで自動デプロイ）
+- App Router で API Routes（Serverless Functions）が自然に書ける
+- TypeScript サポートが標準
+
+### スタイリング: Vanilla CSS (CSS Modules) を選んだ理由
+
+- Tailwind 等のユーティリティ CSS は使わず、CSS 変数でデザインシステムを構築
+- CSS Modules でコンポーネントスコープのスタイルを実現
+- 外部依存なしで軽量
+
+### セキュリティ: GitHub public で問題ない理由
+
+- DB パスワード・接続キー → **存在しない**（IndexedDB はブラウザ内蔵）
+- API キー・シークレット → **存在しない**（OGP 取得は公開 URL を fetch するだけ）
+- 環境変数（.env） → **不要**
+- ユーザーの個人データ → **リポジトリに含まれない**（ブラウザ内のみ）
+
+---
+
+## 📊 データモデル
+
+```typescript
+interface Bookmark {
+  id: string;           // UUID v4
+  url: string;          // 保存した URL
+  title: string;        // ページタイトル（OGP 自動取得 or 手動）
+  description: string;  // ページ説明文（OGP 自動取得）
+  thumbnail: string;    // OG 画像の URL
+  tags: string[];       // タグ（例: ["tech", "design"]）
+  status: "unread" | "read";  // 未読 / 読了
+  starred: boolean;     // お気に入り
+  memo: string;         // 個人メモ
+  createdAt: number;    // 作成日時（Unix timestamp）
+  updatedAt: number;    // 更新日時（Unix timestamp）
+}
+```
+
+---
+
+## 📁 ファイル構成と役割
+
+### コア（`src/lib/`）
+
+| ファイル | 役割 |
+|---|---|
+| `db.ts` | Dexie.js で IndexedDB をセットアップ。Bookmark インターフェース定義 |
+| `bookmarks.ts` | CRUD 関数群: add, getAll, update, delete, toggleStar, toggleStatus |
+
+### API（`src/app/api/`）
+
+| ファイル | 役割 |
+|---|---|
+| `ogp/route.ts` | Vercel Serverless Function。URL を受け取り、HTML を fetch して OGP メタタグ（og:title, og:description, og:image）を cheerio でパース。5 秒タイムアウト付き |
+
+### カスタムフック（`src/hooks/`）
+
+| ファイル | 役割 |
+|---|---|
+| `useBookmarks.ts` | React hook。全ブックマーク取得、フィルタリング（検索・ステータス・タグ・スター）、CRUD ラッパー。変更後に自動リフレッシュ |
+
+### コンポーネント（`src/components/`）
+
+| コンポーネント | 役割 |
+|---|---|
+| `BookmarkCard/` | カード型表示。サムネイル、タイトル、URL ドメイン、タグチップ、スターボタン、ステータスバッジ。ホバーで浮き上がるアニメーション |
+| `AddBookmarkModal/` | URL 追加モーダル。URL 入力 → OGP 自動取得 → プレビュー → タグ・メモ入力 → 保存 |
+| `BookmarkDetail/` | 詳細・編集モーダル。全情報表示、インライン編集、削除（確認付き）、ステータス・スター切替 |
+| `FilterBar/` | 検索バー + ステータスフィルター（ピル型ボタン）+ スターフィルター + タグドロップダウン。スティッキー + backdrop-filter |
+
+### ページ・レイアウト（`src/app/`）
+
+| ファイル | 役割 |
+|---|---|
+| `page.tsx` | メインページ。FilterBar + カードグリッド + FAB（追加ボタン）+ 各モーダルを統合 |
+| `page.module.css` | グラデーションヘッダー、レスポンシブグリッド（1/2/3列）、アニメーション付き FAB |
+| `layout.tsx` | ルートレイアウト。PWA メタデータ、viewport、テーマカラー |
+| `globals.css` | デザインシステム。CSS 変数（色、シャドウ、角丸、フォント、スペーシング、トランジション）、リセット、アニメーション |
+
+### PWA（`public/`）
+
+| ファイル | 役割 |
+|---|---|
+| `manifest.json` | PWA マニフェスト。アプリ名、アイコン、テーマカラー、standalone 表示 |
+| `icon-192.png` | 192x192 アプリアイコン（メガネをかけた本の虫デザイン） |
+| `icon-512.png` | 512x512 アプリアイコン |
+
+---
+
+## ✅ 実装済み機能
+
+- [x] URL 保存（手動入力 + ペースト対応）
+- [x] OGP 自動取得（タイトル、説明文、サムネイル）
+- [x] カード型一覧表示（レスポンシブグリッド）
+- [x] タグ付け（複数タグ、チップ型 UI）
+- [x] 未読 / 読了 ステータス管理
+- [x] お気に入り（スター）機能
+- [x] メモ機能
+- [x] キーワード検索
+- [x] ステータスフィルター
+- [x] タグフィルター
+- [x] スターフィルター
+- [x] ブックマーク編集（タイトル、タグ、メモ）
+- [x] ブックマーク削除（確認ダイアログ付き）
+- [x] PWA マニフェスト + アイコン
+- [x] ライトモード UI（コーラル & ティール配色）
+- [x] レスポンシブデザイン（モバイルファースト）
+- [x] GitHub リポジトリ作成 + Vercel 自動デプロイ
+
+## 🔮 未実装・今後の改善案
+
+- [ ] Service Worker によるオフラインキャッシュ
+- [ ] データのエクスポート / インポート（JSON）
+- [ ] ダークモード対応
+- [ ] ドラッグ & ドロップで並び替え
+- [ ] ブックマークのソート（日付順、タイトル順）
+- [ ] 一括操作（複数選択 → 削除、タグ付け）
+- [ ] ブラウザの「共有」機能からの URL 追加（Web Share Target API）
+- [ ] 読書統計ダッシュボード
+
+---
+
+## 🔧 開発環境
+
+- **OS**: Windows
+- **AI ツール**: Google Antigravity（Claude Opus 4.6 モデル使用）
+- **パッケージマネージャ**: npm
+- **Node.js**: ローカル環境
+- **デプロイ先**: Vercel (Hobby プラン・無料)
+- **リポジトリ**: https://github.com/gyaruweijing-tech/honnno-mushi
+
+---
+
+## 📅 開発タイムライン
+
+### 2026-07-16 — プロジェクト開始 & 初版完成
+
+1. **設計フェーズ**: ユーザーと対話で要件を詰めた
+   - アプリ名を「honnno-mushi（本の虫）」に決定
+   - ストレージは IndexedDB（同期不要、完全無料）
+   - OGP 自動取得は Vercel Serverless Functions 経由
+   - フレームワークは Next.js（Vercel との相性重視）
+   - コスト・セキュリティ面の懸念を全て解消
+2. **実装フェーズ**: Next.js プロジェクト初期化 → 全コンポーネント実装
+3. **デプロイフェーズ**: GitHub CLI でリポジトリ作成 → Vercel 自動デプロイ
+4. **改善**: PWA アイコン画像を生成・設定
+5. **動作確認**: スマホからのアクセス＆ホーム画面追加を確認
+
+---
+
+*最終更新: 2026-07-17*

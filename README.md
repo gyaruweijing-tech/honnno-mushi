@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🐛 honnno-mushi — あなたのリーディングリスト
 
-## Getting Started
+URLを保存してカード型で一覧表示し、タップで元記事に飛んで読む、個人用リーディングリスト PWA。
 
-First, run the development server:
+## ✨ 特徴
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **URL保存 → カード表示** — URLを貼るだけでタイトル・サムネイル・説明文を自動取得（OGP）
+- **タグ・ステータス管理** — タグ付け、未読/読了、お気に入り⭐で整理
+- **検索・フィルター** — キーワード検索、ステータス別、タグ別の絞り込み
+- **PWA対応** — スマホのホーム画面に追加してネイティブアプリのように使える
+- **完全無料・オフライン対応** — データはブラウザ内のIndexedDBに保存。外部DB不要
+- **プライバシー安全** — APIキーもクラウドDBも一切なし。データは端末内のみ
+
+## 🛠 技術スタック
+
+| カテゴリ | 技術 |
+|---|---|
+| フレームワーク | Next.js 16 (App Router) |
+| 言語 | TypeScript |
+| スタイリング | Vanilla CSS (CSS Modules) |
+| ストレージ | IndexedDB (Dexie.js) |
+| OGP取得 | Vercel Serverless Functions + cheerio |
+| デプロイ | Vercel |
+
+## 📁 プロジェクト構造
+
+```
+src/
+├── app/
+│   ├── api/ogp/route.ts      # OGP取得 Serverless Function
+│   ├── globals.css            # デザインシステム（CSS変数）
+│   ├── layout.tsx             # ルートレイアウト（PWA設定）
+│   ├── page.tsx               # メインページ
+│   └── page.module.css        # メインページスタイル
+├── components/
+│   ├── AddBookmarkModal/      # URL追加モーダル
+│   ├── BookmarkCard/          # カード型ブックマーク表示
+│   ├── BookmarkDetail/        # 詳細・編集モーダル
+│   └── FilterBar/             # 検索・フィルターバー
+├── hooks/
+│   └── useBookmarks.ts        # ブックマーク管理カスタムフック
+└── lib/
+    ├── db.ts                  # IndexedDB セットアップ（Dexie）
+    └── bookmarks.ts           # CRUD ヘルパー関数
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 ローカル開発
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npm run dev
+# http://localhost:3000 で開く
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 📦 デプロイ
 
-## Learn More
+GitHub に push するだけで Vercel が自動デプロイします。
 
-To learn more about Next.js, take a look at the following resources:
+## 📄 ライセンス
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
